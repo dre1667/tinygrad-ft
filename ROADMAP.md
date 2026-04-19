@@ -22,9 +22,12 @@ Living document. Check off as shipped.
 - [x] Identity-at-init tested (B=0 → adapter passes base output through unchanged)
 - [x] merge() correctness tested (adapter forward == merged-weight forward)
 - [x] AdamW accepts `get_lora_parameters` output
-- [ ] `data.py`: JSONL → tokenized batches
-- [ ] `train.py`: forward → cross-entropy → backward → AdamW step
-- [ ] Sanity: overfit to 10 examples (loss → 0.1)
+- [x] `tokenizer.py`: HF tokenizer.json wrapper
+- [x] `data.py`: JSONL → tokenized batches with padding + loss mask
+- [x] `train.py`: forward → cross-entropy → backward → AdamW step
+- [x] `forward.py`: `prepare_for_training` + `get_logits_train` (autograd-safe
+      cache-free attention, bypasses `@function` decorator)
+- [x] Sanity: overfit to 5 examples in 30 steps — loss 3.30 → 0.57 (83% drop)
 
 ## Milestone 3 — first real example
 

@@ -75,10 +75,16 @@ class LoRALinear:
 
         # Initialize A with Kaiming uniform (matches PEFT's default).
         # Initialize B with zeros so B·A = 0 at step 0 → adapter is identity.
+        # NOTE: pass requires_grad=True at construction rather than via
+        # `.requires_grad_(True)` after the fact, because some tinygrad Tensor
+        # factory methods (e.g. Tensor.zeros after .contiguous()) eagerly
+        # realize the tensor into a leaf that the optimizer won't recognize
+        # as a trainable parameter. Constructing with requires_grad=True
+        # keeps the Tensor in a state where autograd/optimizer machinery
+        # works cleanly.
         bound = 1.0 / math.sqrt(in_features)
-        self.A = (Tensor.uniform(rank, in_features, low=-bound, high=bound)
-                  .contiguous().requires_grad_(True))
-        self.B = Tensor.zeros(out_features, rank).contiguous().requires_grad_(True)
+        self.A = Tensor.uniform(rank, in_features, low=-bound, high=bound, requires_grad=True)
+        self.B = Tensor.zeros(out_features, rank, requires_grad=True)
 
     def __call__(self, x: Tensor) -> Tensor:
         """Forward pass: base output + scaled LoRA update.
@@ -113,21 +119,38 @@ def apply_lora(
     targets: tuple[str, ...] = DEFAULT_LORA_TARGETS,
     rank: int = 8,
     alpha: int | float = 16,
+    freeze_non_lora: bool = True,
 ) -> list[LoRALinear]:
     """Walk a tinygrad Transformer and swap targeted Linear modules for LoRALinear.
+
+    Also freezes all non-adapter parameters (embeddings, RMSNorms, MLP
+    projections, output head) so that only the LoRA A and B matrices are
+    trainable. Without this freeze, tinygrad's autograd would still compute
+    gradients for all those `requires_grad=True` tensors even though we'd
+    never pass them to the optimizer — and at least empirically that causes
+    the whole backward pass to fail to populate any gradients.
 
     Args:
         model:   a tinygrad Transformer (has `.blk` list of transformer blocks)
         targets: names of Linear attributes per block to wrap. Defaults to
-                 the four attention projections, which covers the canonical
-                 LoRA setup from the paper.
+                 the four attention projections, the canonical LoRA setup.
         rank:    LoRA rank; 4-32 typical. Higher = more capacity + params.
         alpha:   scaling constant. Rule of thumb: alpha = 2 * rank.
+        freeze_non_lora: if True (default), set requires_grad=False on every
+                 existing model parameter before inserting adapters. Turn off
+                 only if you know you want mixed full+LoRA training.
 
     Returns:
         The list of inserted LoRALinear adapters — useful for collecting
         their A/B params to pass to the optimizer via `get_lora_parameters`.
     """
+    # Freeze everything pre-existing — before we add A and B, which will be
+    # the only trainable params after this function returns.
+    if freeze_non_lora:
+        from tinygrad.nn import state as nn_state
+        for t in nn_state.get_parameters(model):
+            t.requires_grad = False
+
     adapters: list[LoRALinear] = []
     for block in model.blk:
         for attr in targets:
