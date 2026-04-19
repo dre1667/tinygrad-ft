@@ -187,7 +187,7 @@ If `tinygrad-ft` enables a published research result, a citation is appreciated:
 
 ```bibtex
 @software{tinygrad-ft,
-  author  = {Gurau, Andrei},
+  author  = {{dre1667}},
   title   = {tinygrad-ft: LoRA fine-tuning and HuggingFace weight loading for tinygrad},
   year    = {2026},
   url     = {https://github.com/dre1667/tinygrad-ft},

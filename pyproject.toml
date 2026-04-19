@@ -10,7 +10,7 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [
-  { name = "Andrei Gurau" },
+  { name = "dre1667" },
 ]
 keywords = ["tinygrad", "lora", "fine-tuning", "llm", "huggingface"]
 classifiers = [
