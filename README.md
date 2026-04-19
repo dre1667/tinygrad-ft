@@ -59,16 +59,46 @@ If any of those empty cells matter to you, this library is for you.
 | Trainable params | 596 M | **2.3 M** | 0.38% |
 | AdamW optimizer state (fp32) | 7.2 GB | **21 MB** | 0.29% |
 
-### Four non-obvious bugs patched along the way (so you don't hit them)
+### Non-obvious bugs patched along the way (so you don't hit them)
 
-If you build something on tinygrad's Transformer, these are the silent-failure traps `tinygrad-ft` works around. All documented inline in the source:
+The [BUGS.md](./BUGS.md) doc is a full post-mortem of every issue that came
+up while building this — 13 distinct bugs across eGPU setup, HF loading,
+and (worst of all) five silent-failure traps inside tinygrad's autograd
+where training just returns `None` gradients with no error. The
+abbreviated list of the autograd traps (fixed in our code):
 
-1. **Lazy eval**: `.backward()` alone doesn't populate `.grad`. Must chain `.backward()` → `Tensor.realize(loss, *opt.schedule_step())`.
-2. **KV cache STORE**: tinygrad's stock attention mutates `cache_kv`, which autograd can't differentiate through. Workaround: cache-free `_attention_train` (monkey-patched at `prepare_for_training` time).
-3. **`@function(precompile=True, allow_implicit=True)` decorator** on `FFNBlock.__call__` treats closure state as implicit constants — LoRA params silently vanish from the grad graph. Workaround: inline block forward in `get_logits_train`.
-4. **`.requires_grad_(True)` on realized tensors** (e.g. after `.contiguous()`) doesn't register with the optimizer. Workaround: pass `requires_grad=True` at factory-function time.
+1. **Lazy eval**: `.backward()` alone doesn't populate `.grad`. Must chain
+   `.backward()` → `Tensor.realize(loss, *opt.schedule_step())`.
+2. **KV cache STORE**: stock attention mutates `cache_kv`, which autograd
+   can't differentiate through. Workaround: cache-free `_attention_train`.
+3. **`@function(precompile=True, allow_implicit=True)` decorator** on
+   `FFNBlock.__call__` treats closure state as implicit constants — LoRA
+   params silently vanish from the grad graph. Workaround: inline block
+   forward in `get_logits_train`.
+4. **`.requires_grad_(True)` on realized tensors** doesn't register with
+   the optimizer. Pass `requires_grad=True` at factory-function time.
+5. **Non-LoRA `requires_grad=True` tensors poison backward** even when not
+   passed to the optimizer. Freeze everything non-adapter explicitly.
 
-See [ROADMAP.md](./ROADMAP.md) for what's next.
+See [BUGS.md](./BUGS.md) for full writeups, and [ROADMAP.md](./ROADMAP.md)
+for what's next.
+
+### Does it actually work? (Before/after benchmark)
+
+`examples/benchmark_finetune.py` trains LoRA rank=8 on 5 small facts for
+50 steps and measures `P(correct_answer | prompt)` before and after:
+
+| Prompt | Correct answer | P(answer) — before | P(answer) — after |
+|---|---|---|---|
+| "The capital of France is" | Paris | 0.66 | **0.9997** |
+| "The capital of Germany is" | Berlin | 0.48 | **0.9998** |
+| "The capital of Japan is" | Tokyo | 0.40 | **0.9997** |
+| "Project Alpha uses port" | 42 | 8 × 10⁻⁷ | **1.0000** |
+| "Project Beta uses port" | 17 | 2 × 10⁻⁵ | **1.0000** |
+
+Known facts: moderate confidence → near-certainty. Invented facts:
+effectively zero → 100%. Loss drops from 4.40 to 0.14 in 50 steps. Run
+the script yourself: `python -m examples.benchmark_finetune`.
 
 ---
 
