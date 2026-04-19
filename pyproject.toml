@@ -55,3 +55,6 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "slow: downloads models / hits network; skip with `pytest -m \"not slow\"`",
+]

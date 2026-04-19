@@ -5,9 +5,12 @@ Living document. Check off as shipped.
 ## Milestone 1 — load
 
 - [x] Repo scaffolded
-- [ ] `hf_load.py`: download Qwen 3 0.6B safetensors from HF
-- [ ] Map HF parameter names → tinygrad `TransformerBlock` names
-- [ ] Build a `TransformerConfig` from HF `config.json`
+- [x] `hf_load.py`: download Qwen 3 0.6B safetensors from HF
+- [x] Map HF parameter names → tinygrad `TransformerBlock` names
+- [x] Build a `TransformerConfig` from HF `config.json`
+- [x] `build.py`: instantiate Transformer and load state_dict (strict)
+- [x] `forward.py`: extract raw logits (bypass Gumbel sampling)
+- [x] End-to-end forward pass on Qwen3-0.6B: shape, determinism, no NaN/Inf
 - [ ] Numerical parity: forward pass output matches reference HF implementation within 1e-3 tolerance on 5 test prompts
 
 ## Milestone 2 — train

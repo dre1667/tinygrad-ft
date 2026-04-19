@@ -67,27 +67,39 @@ def _map_hf_name_to_tinygrad(hf_name: str) -> str | None:
     """Translate a HuggingFace parameter name to the corresponding tinygrad
     attribute path. Returns None if the parameter should be skipped.
 
+    The target names match what tinygrad's `Transformer` class expects when
+    walked by `nn.state.get_state_dict`:
+        self.token_embd.weight
+        self.output_norm.weight
+        self.output.weight
+        self.blk[i].attn_q.weight   (via list index)
+        self.blk[i].attn_k.weight
+        ...
+
     Examples:
-        model.embed_tokens.weight -> tok_embeddings.weight
-        model.layers.5.self_attn.q_proj.weight -> layers.5.attn_q.weight
-        model.layers.5.mlp.gate_proj.weight -> layers.5.ffn_gate.weight
-        model.norm.weight -> norm.weight
-        lm_head.weight -> output.weight
+        model.embed_tokens.weight            -> token_embd.weight
+        model.layers.5.self_attn.q_proj.weight -> blk.5.attn_q.weight
+        model.layers.5.mlp.gate_proj.weight  -> blk.5.ffn_gate.weight
+        model.norm.weight                    -> output_norm.weight
+        lm_head.weight                       -> output.weight
     """
     # strip leading "model." except for lm_head
     name = hf_name
     if name.startswith("model."):
         name = name[len("model."):]
 
-    # top-level
+    # top-level rewrites
     if name == "embed_tokens.weight":
-        return "tok_embeddings.weight"
+        return "token_embd.weight"
     if name == "norm.weight":
-        return "norm.weight"
+        return "output_norm.weight"
     if hf_name == "lm_head.weight":
         return "output.weight"
 
-    # per-layer rewrites
+    # per-layer: "layers.<n>.*" in HF becomes "blk.<n>.*" in tinygrad
+    if name.startswith("layers."):
+        name = "blk." + name[len("layers."):]
+
     replacements = {
         "self_attn.q_proj":           "attn_q",
         "self_attn.k_proj":           "attn_k",
