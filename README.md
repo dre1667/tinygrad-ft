@@ -30,8 +30,8 @@ A short tour of what *wasn't* possible on tinygrad before this library:
 |---|---|---|
 | Run GGUF quantized model | ✅ via `python -m tinygrad.llm` | ✅ |
 | Load HuggingFace safetensors | ❌ no loader | ✅ `load_hf_model("org/name")` |
-| Fine-tune with LoRA | ❌ no adapter primitives | 🚧 planned |
-| Train-loop example for LLMs | ❌ not in `examples/` | 🚧 planned |
+| Fine-tune with LoRA | ❌ no adapter primitives | ✅ `apply_lora(model, rank=8)` |
+| Train-loop example for LLMs | ❌ not in `examples/` | ✅ `examples/overfit_demo.py` |
 | Merge adapter → GGUF for deployment | ❌ no exporter | 🚧 planned |
 
 If any of those empty cells matter to you, this library is for you.
@@ -117,26 +117,55 @@ Output:
 TransformerConfig(num_blocks=28, dim=1024, hidden_dim=3072, n_heads=16,
                   n_kv_heads=8, head_dim=128, qk_norm=128, vocab_size=151936,
                   rope_theta=1000000.0, max_context=40960, ...)
-tok_embeddings.weight       (151936, 1024) dtypes.bfloat16
+token_embd.weight           (151936, 1024) dtypes.bfloat16
 output.weight               (151936, 1024) dtypes.bfloat16
-layers.0.attn_q.weight      (2048, 1024)   dtypes.bfloat16
-layers.0.attn_k.weight      (1024, 1024)   dtypes.bfloat16
-layers.0.attn_v.weight      (1024, 1024)   dtypes.bfloat16
+blk.0.attn_q.weight         (2048, 1024)   dtypes.bfloat16
+blk.0.attn_k.weight         (1024, 1024)   dtypes.bfloat16
+blk.0.attn_v.weight         (1024, 1024)   dtypes.bfloat16
 ```
 
-### (Coming soon) Fine-tune with LoRA
+Or run the bundled smoke test:
+
+```bash
+python -m examples.load_qwen
+```
+
+### Fine-tune with LoRA
 
 ```python
-# Planned API — not yet implemented
-from tinygrad_ft import load_hf_model, apply_lora, Trainer
+from tinygrad.nn.optim import AdamW
+from tinygrad_ft import (
+    apply_lora, build_model, get_lora_parameters,
+    HFTokenizer, load_hf_model, overfit, tokenize_batch,
+)
 
+# Load the base model
 handle = load_hf_model("Qwen/Qwen3-0.6B")
-model = build_transformer(handle)
-apply_lora(model, targets=["attn_q", "attn_k", "attn_v", "attn_output"], rank=8)
+model = build_model(handle)
 
-trainer = Trainer(model, dataset="tatsu-lab/alpaca", lr=1e-4)
-trainer.train(epochs=3)
-trainer.save_adapter("./my-alpaca-adapter")
+# Apply rank-8 LoRA to attention projections; freezes everything else
+adapters = apply_lora(model, rank=8, alpha=16)
+
+# Tokenize a tiny training set
+tokenizer = HFTokenizer(handle.model_path)
+batch = tokenize_batch([
+    {"text": "The capital of France is Paris."},
+    {"text": "The capital of Germany is Berlin."},
+    {"text": "The capital of Japan is Tokyo."},
+], tokenizer, max_length=32)
+
+# AdamW over just the LoRA params (~2.3 M for Qwen3-0.6B)
+optimizer = AdamW(get_lora_parameters(adapters), lr=5e-3)
+
+# Train 30 steps and watch loss drop
+history = overfit(model, batch, optimizer, steps=30, log_every=5)
+print(f"loss: {history[0].loss:.3f} → {history[-1].loss:.3f}")
+```
+
+Or run the bundled end-to-end demo (~2 minutes on a 7900 XT):
+
+```bash
+python -m examples.overfit_demo
 ```
 
 ---
@@ -168,17 +197,25 @@ Tested on:
 
 ```
 tinygrad_ft/
-├── hf_load.py         # safetensors → tinygrad Tensor mapping   [✅ implemented]
-├── lora.py            # LoRA adapter class                       [planned]
-├── tokenizer.py       # HF tokenizer wrapper                     [planned]
-├── data.py            # JSONL → batched token tensors            [planned]
-├── train.py           # training loop                            [planned]
-├── save.py            # save/load LoRA weights                   [planned]
-├── export_gguf.py     # merge adapter + base → GGUF              [planned]
-└── examples/
-    ├── tinystories/   [planned]
-    ├── alpaca/        [planned]
-    └── gsm8k/         [planned]
+├── hf_load.py       # safetensors → tinygrad Tensor mapping            [✅]
+├── build.py         # Transformer instantiation + strict state load    [✅]
+├── forward.py       # get_logits + training-safe get_logits_train      [✅]
+├── lora.py          # LoRALinear, apply_lora, merge()                  [✅]
+├── tokenizer.py     # HF tokenizer.json wrapper                        [✅]
+├── data.py          # JSONL → padded tokenized batches                 [✅]
+├── train.py         # compute_loss, train_step, overfit                [✅]
+├── save.py          # save/load LoRA adapter weights                   [⏳]
+└── export_gguf.py   # merge adapter + base → GGUF for inference        [⏳]
+
+examples/
+├── load_qwen.py     # HF download → forward pass smoke test            [✅]
+└── overfit_demo.py  # full LoRA training loop, 5 examples, 30 steps    [✅]
+
+tests/
+├── test_name_mapping.py   # 7 fast unit tests
+├── test_forward_qwen.py   # slow integration, shape + determinism
+├── test_lora.py           # unit tests + integration w/ real Qwen3
+└── test_train.py          # end-to-end overfit sanity (the big one)
 ```
 
 ---
