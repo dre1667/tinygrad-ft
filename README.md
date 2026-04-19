@@ -40,11 +40,33 @@ If any of those empty cells matter to you, this library is for you.
 
 ## What works right now (v0.0.1)
 
-- **HuggingFace loader** for Qwen 3 / Qwen 3.5 dense (and Qwen 2) models
-- Correct bf16 handling — bypasses numpy's missing bf16 dtype by parsing safetensors directly and reinterpreting via tinygrad's `bitcast`
-- HF → tinygrad parameter name translation (311/311 params remapped for Qwen3-0.6B with zero unmapped)
-- `TransformerConfig` auto-derived from HuggingFace `config.json`
-- Unit-tested parameter name mapping
+- **HuggingFace model loader** — Qwen 3 / Qwen 3.5 / Qwen 2, bf16-aware
+- **`TransformerConfig` auto-derived** from HuggingFace `config.json`
+- **HF → tinygrad parameter name translation** (Qwen3-0.6B: 311/311 mapped, zero unmapped)
+- **`build_model`** — instantiate tinygrad's `Transformer` and load the state dict strict-mode
+- **`get_logits` / `get_logits_train`** — inference-safe and autograd-safe forward passes
+- **`LoRALinear`** — drop-in `nn.Linear` replacement with rank-r trainable low-rank update; `merge()` folds the adapter into the base for GGUF export
+- **`apply_lora(model, rank=8)`** — walks a Transformer and swaps attention projections, freezes all non-LoRA params
+- **`compute_loss` / `train_step` / `overfit`** — cross-entropy next-token loss with ignore_index masking, chained backward+realize pattern (lazy-eval safe)
+- **HF tokenizer wrapper** + JSONL → padded batch pipeline
+
+**Proven end-to-end**: Qwen3-0.6B + rank-8 LoRA overfits to 5 fixed examples, loss drops 3.30 → 0.57 in 30 steps. See [`tests/test_train.py`](./tests/test_train.py).
+
+**Param-efficiency at rank=8** for Qwen3-0.6B:
+
+| | Full FT | LoRA r=8 | Ratio |
+|---|---|---|---|
+| Trainable params | 596 M | **2.3 M** | 0.38% |
+| AdamW optimizer state (fp32) | 7.2 GB | **21 MB** | 0.29% |
+
+### Four non-obvious bugs patched along the way (so you don't hit them)
+
+If you build something on tinygrad's Transformer, these are the silent-failure traps `tinygrad-ft` works around. All documented inline in the source:
+
+1. **Lazy eval**: `.backward()` alone doesn't populate `.grad`. Must chain `.backward()` → `Tensor.realize(loss, *opt.schedule_step())`.
+2. **KV cache STORE**: tinygrad's stock attention mutates `cache_kv`, which autograd can't differentiate through. Workaround: cache-free `_attention_train` (monkey-patched at `prepare_for_training` time).
+3. **`@function(precompile=True, allow_implicit=True)` decorator** on `FFNBlock.__call__` treats closure state as implicit constants — LoRA params silently vanish from the grad graph. Workaround: inline block forward in `get_logits_train`.
+4. **`.requires_grad_(True)` on realized tensors** (e.g. after `.contiguous()`) doesn't register with the optimizer. Workaround: pass `requires_grad=True` at factory-function time.
 
 See [ROADMAP.md](./ROADMAP.md) for what's next.
 
@@ -123,9 +145,9 @@ trainer.save_adapter("./my-alpaca-adapter")
 
 | Family | Load HF | Forward pass | LoRA fine-tune |
 |---|---|---|---|
-| Qwen 3 (dense) | ✅ | 🚧 | 🚧 |
-| Qwen 3.5 (dense) | ✅ | 🚧 | 🚧 |
-| Qwen 2 | ✅ | 🚧 | 🚧 |
+| Qwen 3 (dense) | ✅ | ✅ | ✅ |
+| Qwen 3.5 (dense) | ✅ | ✅ | ✅ (untested on 27B+) |
+| Qwen 2 | ✅ | ✅ | ✅ |
 | Qwen 3 MoE (30B-A3B, 35B-A3B) | planned | planned | planned |
 | Llama 3.1 / 3.2 | planned | planned | planned |
 | Mistral / Mixtral | planned | planned | planned |
