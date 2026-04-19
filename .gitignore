@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# venv
+.venv/
+venv/
+env/
+ENV/
+
+# tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# model weights / adapters (too big to commit)
+adapters/
+checkpoints/
+*.safetensors
+*.gguf
+*.bin
+models/downloads/
+
+# data (too big + possibly PHI)
+data/cache/
+data/raw/
+*.parquet
+*.arrow

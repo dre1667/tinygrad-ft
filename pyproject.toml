@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tinygrad-ft"
+version = "0.0.1"
+description = "LoRA fine-tuning and HuggingFace weight loading for tinygrad"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [
+  { name = "Andrei Gurau" },
+]
+keywords = ["tinygrad", "lora", "fine-tuning", "llm", "huggingface"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+  "tinygrad>=0.12.0",
+  "huggingface_hub>=0.25",
+  "safetensors>=0.4",
+  "tokenizers>=0.20",
+  "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+]
+examples = [
+  "datasets>=3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/dre1667/tinygrad-ft"
+Issues = "https://github.com/dre1667/tinygrad-ft/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tinygrad_ft*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
