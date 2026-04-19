@@ -15,8 +15,13 @@ Living document. Check off as shipped.
 
 ## Milestone 2 — train
 
-- [ ] `lora.py`: `LoRALinear` wrapping `nn.Linear`
-- [ ] `apply_lora_to_model(model, targets=["attn_q", "attn_k", "attn_v", "attn_output"], rank=8)`
+- [x] `lora.py`: `LoRALinear` wrapping `nn.Linear`
+- [x] `apply_lora(model, targets=[...], rank=8)` — walks model, swaps Linears
+- [x] `get_lora_parameters(adapters)` — returns flat list for optimizer
+- [x] `count_lora_parameters(adapters)` — Qwen3-0.6B at rank=8 → 2,293,760 trainable (0.38% of full)
+- [x] Identity-at-init tested (B=0 → adapter passes base output through unchanged)
+- [x] merge() correctness tested (adapter forward == merged-weight forward)
+- [x] AdamW accepts `get_lora_parameters` output
 - [ ] `data.py`: JSONL → tokenized batches
 - [ ] `train.py`: forward → cross-entropy → backward → AdamW step
 - [ ] Sanity: overfit to 10 examples (loss → 0.1)
